@@ -1,0 +1,18 @@
+{
+  "name": "pagespeed-archive",
+  "version": "1.0.0",
+  "description": "Capture and archive PageSpeed Insights reports, hosted on GitHub Pages",
+  "type": "module",
+  "bin": {
+    "psa": "./bin/capture.mjs"
+  },
+  "scripts": {
+    "capture": "node bin/capture.mjs",
+    "build-index": "node bin/build-index.mjs"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "puppeteer": "^25.2.1",
+    "single-file-cli": "^1.1.54"
+  }
+}
