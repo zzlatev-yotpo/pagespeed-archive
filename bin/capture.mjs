@@ -10,6 +10,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const REPORTS_DIR = resolve(ROOT, 'reports');
 
+async function getBrowserPath() {
+  const puppeteer = await import('puppeteer');
+  return puppeteer.default.executablePath();
+}
+
 function parsePagespeedUrl(url) {
   const match = url.match(
     /pagespeed\.web\.dev\/analysis\/([^/]+)\/([^?]+)/
@@ -23,22 +28,17 @@ function parsePagespeedUrl(url) {
   const encodedTarget = match[1];
   const analysisId = match[2];
 
-  const targetUrl = encodedTarget
-    .replace(/-/g, '/')
-    .replace(/^https\/\//, 'https://')
-    .replace(/^http\/\//, 'http://');
-
   const formFactorMatch = url.match(/form_factor=(mobile|desktop)/);
   const formFactor = formFactorMatch ? formFactorMatch[1] : 'mobile';
 
+  // Extract a readable page name from the encoded URL slug
+  // e.g. "https-yotpocosmetics-com-pages-rewards" → "yotpocosmetics-pages-rewards"
   const pageName = encodedTarget
     .replace(/^https?-/, '')
-    .replace(/-com-/, '-')
-    .split('-')
-    .slice(0, 4)
-    .join('-');
+    .replace(/-com(?=-|$)/, '')
+    .replace(/-{2,}/g, '-');
 
-  return { targetUrl, analysisId, formFactor, pageName, encodedTarget };
+  return { analysisId, formFactor, pageName, encodedTarget };
 }
 
 function buildFilename(parsed, dateStr) {
@@ -50,7 +50,7 @@ function captureReport(url, opts) {
 
   console.log(`\nParsing URL...`);
   const parsed = parsePagespeedUrl(url);
-  console.log(`  Target:      ${parsed.targetUrl}`);
+  console.log(`  Page:        ${parsed.pageName}`);
   console.log(`  Form factor: ${parsed.formFactor}`);
   console.log(`  Analysis ID: ${parsed.analysisId}`);
 
@@ -66,55 +66,58 @@ function captureReport(url, opts) {
   console.log(`\nCapturing report → ${filename}`);
   console.log(`  (this takes 15-30s while the page renders...)\n`);
 
-  try {
-    execSync(
-      [
-        'npx single-file',
-        `"${url}"`,
-        `"${outputPath}"`,
-        '--browser-wait-until=networkidle0',
-        '--browser-wait-delay=5000',
-        '--browser-arg="--no-sandbox"',
-      ].join(' '),
-      { cwd: ROOT, stdio: 'inherit', timeout: 120_000 }
-    );
-  } catch (err) {
-    console.error('\nCapture failed. Ensure puppeteer/chromium is available.');
-    console.error(err.message);
-    process.exit(1);
-  }
-
-  if (!existsSync(outputPath)) {
-    console.error('Output file not found after capture.');
-    process.exit(1);
-  }
-
-  let html = readFileSync(outputPath, 'utf-8');
-  if (!html.includes('noindex')) {
-    html = html.replace(
-      /<head([^>]*)>/i,
-      '<head$1><meta name="robots" content="noindex, nofollow">'
-    );
-    writeFileSync(outputPath, html);
-  }
-
-  console.log(`\n✅ Saved: reports/${filename}`);
-
-  console.log('Rebuilding index...');
-  execSync('node bin/build-index.mjs', { cwd: ROOT, stdio: 'inherit' });
-
-  if (opts.push !== false) {
-    console.log('\nCommitting and pushing...');
+  getBrowserPath().then((browserPath) => {
     try {
       execSync(
-        `git add reports/ index.html && git commit -m "archive: ${filename}" && git push`,
-        { cwd: ROOT, stdio: 'inherit' }
+        [
+          'npx single-file',
+          `"${url}"`,
+          `"${outputPath}"`,
+          `--browser-executable-path="${browserPath}"`,
+          '--browser-wait-until=networkidle0',
+          '--browser-wait-delay=5000',
+          '--browser-arg="--no-sandbox"',
+        ].join(' '),
+        { cwd: ROOT, stdio: 'inherit', timeout: 120_000 }
       );
-      console.log('✅ Pushed to remote.');
     } catch (err) {
-      console.error('⚠️  Git push failed (commit may still exist locally).');
+      console.error('\nCapture failed. Ensure puppeteer/chromium is available.');
+      console.error(err.message);
+      process.exit(1);
     }
-  }
+
+    if (!existsSync(outputPath)) {
+      console.error('Output file not found after capture.');
+      process.exit(1);
+    }
+
+    let html = readFileSync(outputPath, 'utf-8');
+    if (!html.includes('noindex')) {
+      html = html.replace(
+        /<head([^>]*)>/i,
+        '<head$1><meta name="robots" content="noindex, nofollow">'
+      );
+      writeFileSync(outputPath, html);
+    }
+
+    console.log(`\n✅ Saved: reports/${filename}`);
+
+    console.log('Rebuilding index...');
+    execSync('node bin/build-index.mjs', { cwd: ROOT, stdio: 'inherit' });
+
+    if (opts.push !== false) {
+      console.log('\nCommitting and pushing...');
+      try {
+        execSync(
+          `git add reports/ index.html && git commit -m "archive: ${filename}" && git push`,
+          { cwd: ROOT, stdio: 'inherit' }
+        );
+        console.log('✅ Pushed to remote.');
+      } catch (err) {
+        console.error('⚠️  Git push failed (commit may still exist locally).');
+      }
+    }
+  });
 }
 
 program
