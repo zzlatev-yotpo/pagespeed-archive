@@ -45,93 +45,102 @@ function buildFilename(parsed, dateStr) {
   return `${parsed.pageName}_${parsed.formFactor}_${dateStr}_${parsed.analysisId.slice(0, 8)}.html`;
 }
 
+function captureReport(url, opts) {
+  const date = opts.date || new Date().toISOString().slice(0, 10);
+
+  console.log(`\nParsing URL...`);
+  const parsed = parsePagespeedUrl(url);
+  console.log(`  Target:      ${parsed.targetUrl}`);
+  console.log(`  Form factor: ${parsed.formFactor}`);
+  console.log(`  Analysis ID: ${parsed.analysisId}`);
+
+  const filename = opts.name
+    ? `${opts.name}.html`
+    : buildFilename(parsed, date);
+  const outputPath = resolve(REPORTS_DIR, filename);
+
+  if (!existsSync(REPORTS_DIR)) {
+    mkdirSync(REPORTS_DIR, { recursive: true });
+  }
+
+  console.log(`\nCapturing report → ${filename}`);
+  console.log(`  (this takes 15-30s while the page renders...)\n`);
+
+  try {
+    execSync(
+      [
+        'npx single-file',
+        `"${url}"`,
+        `"${outputPath}"`,
+        '--browser-wait-until=networkidle0',
+        '--browser-wait-delay=5000',
+        '--browser-arg="--no-sandbox"',
+      ].join(' '),
+      { cwd: ROOT, stdio: 'inherit', timeout: 120_000 }
+    );
+  } catch (err) {
+    console.error('\nCapture failed. Ensure puppeteer/chromium is available.');
+    console.error(err.message);
+    process.exit(1);
+  }
+
+  if (!existsSync(outputPath)) {
+    console.error('Output file not found after capture.');
+    process.exit(1);
+  }
+
+  let html = readFileSync(outputPath, 'utf-8');
+  if (!html.includes('noindex')) {
+    html = html.replace(
+      /<head([^>]*)>/i,
+      '<head$1><meta name="robots" content="noindex, nofollow">'
+    );
+    writeFileSync(outputPath, html);
+  }
+
+  console.log(`\n✅ Saved: reports/${filename}`);
+
+  console.log('Rebuilding index...');
+  execSync('node bin/build-index.mjs', { cwd: ROOT, stdio: 'inherit' });
+
+  if (opts.push !== false) {
+    console.log('\nCommitting and pushing...');
+    try {
+      execSync(
+        `git add reports/ index.html && git commit -m "archive: ${filename}" && git push`,
+        { cwd: ROOT, stdio: 'inherit' }
+      );
+      console.log('✅ Pushed to remote.');
+    } catch (err) {
+      console.error('⚠️  Git push failed (commit may still exist locally).');
+    }
+  }
+}
+
 program
   .name('psa')
   .description('Capture PageSpeed Insights reports as self-contained HTML')
-  .version('1.0.0');
+  .version('1.0.0')
+  .argument('[url]', 'Full pagespeed.web.dev analysis URL')
+  .option('-d, --date <date>', 'Date label (YYYY-MM-DD)')
+  .option('-n, --name <name>', 'Custom filename (without .html)')
+  .option('--no-push', 'Skip git commit and push')
+  .action((url, opts) => {
+    if (url) {
+      captureReport(url, opts);
+    } else {
+      program.help();
+    }
+  });
 
 program
   .command('capture')
   .description('Capture a pagespeed.web.dev report URL')
   .argument('<url>', 'Full pagespeed.web.dev analysis URL')
-  .option('-d, --date <date>', 'Date label (YYYY-MM-DD)', () => {
-    return new Date().toISOString().slice(0, 10);
-  })
+  .option('-d, --date <date>', 'Date label (YYYY-MM-DD)')
   .option('-n, --name <name>', 'Custom filename (without .html)')
   .option('--no-push', 'Skip git commit and push')
-  .action((url, opts) => {
-    const date = opts.date || new Date().toISOString().slice(0, 10);
-
-    console.log(`\nParsing URL...`);
-    const parsed = parsePagespeedUrl(url);
-    console.log(`  Target:      ${parsed.targetUrl}`);
-    console.log(`  Form factor: ${parsed.formFactor}`);
-    console.log(`  Analysis ID: ${parsed.analysisId}`);
-
-    const filename = opts.name
-      ? `${opts.name}.html`
-      : buildFilename(parsed, date);
-    const outputPath = resolve(REPORTS_DIR, filename);
-
-    if (!existsSync(REPORTS_DIR)) {
-      mkdirSync(REPORTS_DIR, { recursive: true });
-    }
-
-    console.log(`\nCapturing report → ${filename}`);
-    console.log(`  (this takes 15-30s while the page renders...)\n`);
-
-    try {
-      execSync(
-        [
-          'npx single-file',
-          `"${url}"`,
-          `"${outputPath}"`,
-          '--browser-wait-until=networkidle0',
-          '--browser-wait-delay=5000',
-          '--browser-arg="--no-sandbox"',
-        ].join(' '),
-        { cwd: ROOT, stdio: 'inherit', timeout: 120_000 }
-      );
-    } catch (err) {
-      console.error('\nCapture failed. Ensure puppeteer/chromium is available.');
-      console.error(err.message);
-      process.exit(1);
-    }
-
-    if (!existsSync(outputPath)) {
-      console.error('Output file not found after capture.');
-      process.exit(1);
-    }
-
-    // Inject noindex meta tag into captured HTML
-    let html = readFileSync(outputPath, 'utf-8');
-    if (!html.includes('noindex')) {
-      html = html.replace(
-        /<head([^>]*)>/i,
-        '<head$1><meta name="robots" content="noindex, nofollow">'
-      );
-      writeFileSync(outputPath, html);
-    }
-
-    console.log(`\n✅ Saved: reports/${filename}`);
-
-    // Rebuild index
-    console.log('Rebuilding index...');
-    execSync('node bin/build-index.mjs', { cwd: ROOT, stdio: 'inherit' });
-
-    if (opts.push !== false) {
-      console.log('\nCommitting and pushing...');
-      try {
-        execSync(
-          `git add reports/ index.html && git commit -m "archive: ${filename}" && git push`,
-          { cwd: ROOT, stdio: 'inherit' }
-        );
-        console.log('✅ Pushed to remote.');
-      } catch (err) {
-        console.error('⚠️  Git push failed (commit may still exist locally).');
-      }
-    }
-  });
+  .action(captureReport);
 
 program
   .command('list')
