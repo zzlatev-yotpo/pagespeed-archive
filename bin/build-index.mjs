@@ -49,6 +49,7 @@ const html = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
   <title>PageSpeed Archive</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }

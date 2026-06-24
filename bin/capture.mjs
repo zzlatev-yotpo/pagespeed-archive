@@ -2,7 +2,7 @@
 
 import { program } from 'commander';
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync, readdirSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -101,6 +101,16 @@ program
     if (!existsSync(outputPath)) {
       console.error('Output file not found after capture.');
       process.exit(1);
+    }
+
+    // Inject noindex meta tag into captured HTML
+    let html = readFileSync(outputPath, 'utf-8');
+    if (!html.includes('noindex')) {
+      html = html.replace(
+        /<head([^>]*)>/i,
+        '<head$1><meta name="robots" content="noindex, nofollow">'
+      );
+      writeFileSync(outputPath, html);
     }
 
     console.log(`\n✅ Saved: reports/${filename}`);
