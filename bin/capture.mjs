@@ -74,6 +74,8 @@ function captureReport(url, opts) {
           `"${url}"`,
           `"${outputPath}"`,
           `--browser-executable-path="${browserPath}"`,
+          '--no-block-scripts',
+          '--no-remove-hidden-elements',
           '--browser-wait-until=networkidle0',
           '--browser-wait-delay=5000',
           '--browser-arg="--no-sandbox"',
