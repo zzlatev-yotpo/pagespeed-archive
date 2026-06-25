@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "commander": "^12.1.0",
-    "puppeteer": "^25.2.1",
-    "single-file-cli": "^1.1.54"
+    "puppeteer": "^25.2.1"
   }
 }

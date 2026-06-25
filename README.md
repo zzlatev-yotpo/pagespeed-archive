@@ -39,6 +39,7 @@ This will:
 |------|-------------|
 | `-d, --date <YYYY-MM-DD>` | Override the date label (defaults to today) |
 | `-n, --name <name>` | Custom filename (without `.html` extension) |
+| `-b, --both` | Capture both mobile and desktop in one run |
 | `--no-push` | Save locally without committing/pushing |
 
 ### List archived reports
@@ -49,7 +50,8 @@ npm run capture -- list
 
 ## How it works
 
-- **Capture:** Uses [SingleFile](https://github.com/nicksavill/single-file-cli) via Puppeteer to serialize the fully-rendered SPA into one HTML file (CSS, images, fonts inlined as data URIs).
+- **Capture:** Uses [SingleFile](https://github.com/gildas-lormeau/single-file-cli) via Puppeteer to serialize the fully-rendered SPA into one HTML file (CSS, images, fonts inlined as data URIs).
+- **Cleanup:** Post-processing strips all JavaScript (which can't function offline) and CSP meta tags, producing a clean static snapshot with no console errors.
 - **Index:** Auto-generated `index.html` lists all archived reports with page name, device type, and date.
 - **Deploy:** A GitHub Actions workflow deploys the repo to GitHub Pages on every push to `master`.
 - **SEO:** `robots.txt` disallows all crawlers; every HTML file carries `<meta name="robots" content="noindex, nofollow">`.
